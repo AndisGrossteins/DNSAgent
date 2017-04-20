@@ -10,12 +10,20 @@ using System.Threading;
 using System.Threading.Tasks;
 using ARSoft.Tools.Net;
 using ARSoft.Tools.Net.Dns;
+
+using log4net;
 using DNSAgent;
 
 namespace DnsAgent
 {
     internal class DnsAgent
     {
+        private static readonly ILog logger =
+                LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+        //private static readonly log4net.ILog log =
+        //        log4net.LogManager.GetLogger(typeof(DnsAgent));
+
+
         private Task _forwardingTask;
         private Task _listeningTask;
         private List<KeyValuePair<IPAddress, int>> _networkWhitelist; // Key for address, value for mask
@@ -74,7 +82,7 @@ namespace DnsAgent
             }
             catch (SocketException e)
             {
-                Logger.Error("[Listener] Failed to start DNSAgent:\n{0}", e);
+                logger.Error("[Listener] Failed to start DNSAgent:\n{0}", e);
                 Stop();
                 return false;
             }
@@ -91,7 +99,7 @@ namespace DnsAgent
                     catch (SocketException e)
                     {
                         if (e.SocketErrorCode != SocketError.ConnectionReset)
-                            Logger.Error("[Listener.Receive] Unexpected socket error:\n{0}", e);
+                            logger.Error("[Listener.Receive] Unexpected socket error:\n{0}", e);
                     }
                     catch (AggregateException e)
                     {
@@ -99,17 +107,17 @@ namespace DnsAgent
                         if (socketException != null)
                         {
                             if (socketException.SocketErrorCode != SocketError.ConnectionReset)
-                                Logger.Error("[Listener.Receive] Unexpected socket error:\n{0}", e);
+                                logger.Error("[Listener.Receive] Unexpected socket error:\n{0}", e);
                         }
                         else
-                            Logger.Error("[Listener] Unexpected exception:\n{0}", e);
+                            logger.Error("[Listener] Unexpected exception:\n{0}", e);
                     }
                     catch (ObjectDisposedException)
                     {
                     } // Force closing _udpListener will cause this exception
                     catch (Exception e)
                     {
-                        Logger.Error("[Listener] Unexpected exception:\n{0}", e);
+                        logger.Error("[Listener] Unexpected exception:\n{0}", e);
                     }
                 }
             }, _stopTokenSource.Token);
@@ -147,21 +155,21 @@ namespace DnsAgent
                     catch (SocketException e)
                     {
                         if (e.SocketErrorCode != SocketError.ConnectionReset)
-                            Logger.Error("[Forwarder.Send] Name server unreachable.");
+                            logger.Error("[Forwarder.Send] Name server unreachable.");
                         else
-                            Logger.Error("[Forwarder.Receive] Unexpected socket error:\n{0}", e);
+                            logger.Error("[Forwarder.Receive] Unexpected socket error:\n{0}", e);
                     }
                     catch (ObjectDisposedException)
                     {
                     } // Force closing _udpListener will cause this exception
                     catch (Exception e)
                     {
-                        Logger.Error("[Forwarder] Unexpected exception:\n{0}", e);
+                        logger.Error("[Forwarder] Unexpected exception:\n{0}", e);
                     }
                 }
             }, _stopTokenSource.Token);
 
-            Logger.Info("Listening on {0}...", endPoint);
+            logger.Info($"Listening on {endPoint}...");
             OnStarted();
             return true;
         }
@@ -219,15 +227,12 @@ namespace DnsAgent
                             !pair.Key.GetNetworkAddress(pair.Value)
                                 .Equals(udpMessage.RemoteEndPoint.Address.GetNetworkAddress(pair.Value))))
                         {
-                            Logger.Info("-> {0} is not authorized, who requested {1}.",
-                                udpMessage.RemoteEndPoint.Address,
-                                question);
+                            logger.Info("-> {udpMessage.RemoteEndPoint.Address} is not authorized, who requested {question}.");
                             message.ReturnCode = ReturnCode.Refused;
                             message.IsQuery = false;
                         }
                     }
-                    Logger.Info("-> {0} requested {1} (#{2}, {3}).", udpMessage.RemoteEndPoint.Address, question.Name,
-                        message.TransactionID, question.RecordType);
+                    logger.Info($"-> {udpMessage.RemoteEndPoint.Address} requested {question.Name} (#{message.TransactionID}, {question.RecordType}).");
 
                     // Query cache
                     if (Options.CacheResponse)
@@ -238,8 +243,7 @@ namespace DnsAgent
                             if (!entry.IsExpired)
                             {
                                 var cachedMessage = entry.Message;
-                                Logger.Info("-> #{0} served from cache.", message.TransactionID,
-                                    cachedMessage.TransactionID);
+                                logger.Info($"-> #{message.TransactionID} served from cache.");
                                 cachedMessage.TransactionID = message.TransactionID; // Update transaction ID
                                 cachedMessage.TSigOptions = message.TSigOptions; // Update TSig options
                                 message = cachedMessage;
@@ -303,7 +307,7 @@ namespace DnsAgent
                                                     address, recordType, question.RecordClass, null);
                                         if (response == null)
                                         {
-                                            Logger.Warning($"Remote resolve failed for {address}.");
+                                            logger.Warn($"Remote resolve failed for {address}.");
                                             return;
                                         }
                                         foreach (var answerRecord in response.AnswerRecords)
@@ -389,11 +393,11 @@ namespace DnsAgent
                 }
                 catch (SocketException e)
                 {
-                    Logger.Error("[Listener.Send] Unexpected socket error:\n{0}", e);
+                    logger.Error("[Listener.Send] Unexpected socket error:\n{0}", e);
                 }
                 catch (Exception e)
                 {
-                    Logger.Error("[Processor] Unexpected exception:\n{0}", e);
+                    logger.Error("[Processor] Unexpected exception:\n{0}", e);
                 }
             });
         }
@@ -444,7 +448,7 @@ namespace DnsAgent
                     var warningText = message.Questions.Count > 0
                         ? $"{message.Questions[0].Name} (Type {message.Questions[0].RecordType})"
                         : $"Transaction #{message.TransactionID}";
-                    Logger.Warning("Query timeout for: {0}", warningText);
+                    logger.Warn($"Query timeout for: {warningText}");
                 }
                 catch (TaskCanceledException)
                 {
@@ -452,21 +456,20 @@ namespace DnsAgent
             }
             catch (InfiniteForwardingException e)
             {
-                Logger.Warning("[Forwarder.Send] Infinite forwarding detected for: {0} (Type {1})", e.Question.Name,
-                    e.Question.RecordType);
+                logger.Warn($"[Forwarder.Send] Infinite forwarding detected for: {e.Question.Name} (Type {e.Question.RecordType})");
                 Utils.ReturnDnsMessageServerFailure(message, out responseBuffer);
             }
             catch (SocketException e)
             {
                 if (e.SocketErrorCode == SocketError.ConnectionReset) // Target name server port unreachable
-                    Logger.Warning("[Forwarder.Send] Name server port unreachable: {0}", targetNameServer);
+                    logger.Warn($"[Forwarder.Send] Name server port unreachable: {targetNameServer}");
                 else
-                    Logger.Error("[Forwarder.Send] Unhandled socket error: {0}", e.Message);
+                    logger.Error($"[Forwarder.Send] Unhandled socket error: {e.Message}");
                 Utils.ReturnDnsMessageServerFailure(message, out responseBuffer);
             }
             catch (Exception e)
             {
-                Logger.Error("[Forwarder] Unexpected exception:\n{0}", e);
+                logger.Error("[Forwarder] Unexpected exception:\n{0}", e);
                 Utils.ReturnDnsMessageServerFailure(message, out responseBuffer);
             }
 

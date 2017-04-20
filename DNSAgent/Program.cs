@@ -11,13 +11,20 @@ using System.ServiceProcess;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using DNSAgent;
+
+using log4net;
+using log4net.Config;
 using Newtonsoft.Json;
+
+using DNSAgent;
 
 namespace DnsAgent
 {
     internal class Program
     {
+        private static readonly ILog logger =
+                LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
+
         private const string OptionsFileName = "options.cfg";
         private const string RulesFileName = "rules.cfg";
         private static readonly List<DnsAgent> DnsAgents = new List<DnsAgent>();
@@ -27,6 +34,7 @@ namespace DnsAgent
 
         private static void Main(string[] args)
         {
+
             Directory.SetCurrentDirectory(AppDomain.CurrentDomain.BaseDirectory);
 
             if (!Environment.UserInteractive) // Running as service
@@ -42,26 +50,28 @@ namespace DnsAgent
                     case "--install":
                         ManagedInstallerClass.InstallHelper(new[]
                         {"/LogFile=", Assembly.GetExecutingAssembly().Location});
-                        return;
+                        break;
 
                     case "--uninstall":
                         ManagedInstallerClass.InstallHelper(new[]
                         {"/LogFile=", "/u", Assembly.GetExecutingAssembly().Location});
-                        return;
+                        break;
+
+                    default:
+                        Start(args);
+                        break;
                 }
-                Start(args);
             }
         }
 
         private static void Start(string[] args)
         {
-            Logger.Title = "DNSAgent - Starting ...";
 
             var version = Assembly.GetExecutingAssembly().GetName().Version;
             var buildTime = Utils.RetrieveLinkerTimestamp(Assembly.GetExecutingAssembly().Location);
             var programName = $"DNSAgent {version.Major}.{version.Minor}.{version.Build}";
-            Logger.Info("{0} (build at {1})\n", programName, buildTime.ToString(CultureInfo.CurrentCulture));
-            Logger.Info("Starting...");
+            logger.Info($"{programName} (built on {buildTime.ToString(CultureInfo.CurrentCulture)})");
+            logger.Info("Starting DNSAgent...");
 
             var options = ReadOptions();
             var rules = ReadRules();
@@ -87,9 +97,8 @@ namespace DnsAgent
                     }
                 }
                 startedEvent.Wait();
-                Logger.Title = "DNSAgent - Listening ...";
-                Logger.Info("DNSAgent has been started.");
-                Logger.Info("Press Ctrl-R to reload configurations, Ctrl-Q to stop and quit.");
+                logger.Info("DNSAgent has been started.");
+                Console.WriteLine("Press Ctrl-R to reload configurations, Ctrl-Q to stop and quit.");
 
                 Task.Run(() =>
                 {
@@ -157,7 +166,7 @@ namespace DnsAgent
                         agent.Start();
                     }
                 }
-                Logger.Info("DNSAgent has been started.");
+                logger.Info("DNSAgent has been started.");
             }
         }
 
@@ -170,11 +179,10 @@ namespace DnsAgent
                     agent.Stop();
                 });
             }
-            Logger.Info("DNSAgent has been stopped.");
+            logger.Info("DNSAgent has been stopped.");
 
             if (Environment.UserInteractive)
             {
-                Logger.Title = "DNSAgent - Stopped";
                 _notifyIcon.Dispose();
                 _contextMenu.Dispose();
                 if (pressAnyKeyToContinue)
@@ -196,12 +204,12 @@ namespace DnsAgent
                 }
             }
             AgentCommonCache.Clear();
-            Logger.Info("Options and rules reloaded. Cache cleared.");
+            logger.Info("Options and rules reloaded. Cache cleared.");
         }
 
         private static void PressAnyKeyToContinue()
         {
-            Logger.Info("Press any key to continue . . . ");
+            logger.Info("Press any key to continue . . . ");
             Console.ReadKey(true);
         }
 
