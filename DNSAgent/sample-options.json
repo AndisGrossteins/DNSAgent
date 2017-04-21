@@ -1,0 +1,13 @@
+﻿{
+	"AppConfiguration": {
+		"HideOnStart": false,
+		"ListenOn": "127.0.0.1:53",
+		"LocalNameServer": "119.29.29.29",
+		"WorldNameServer": "8.8.8.8",
+		"QueryTimeout": 4000,
+		"CompressionMutation": false,
+		"CacheResponse": true,
+		"CacheAge": 0,
+		"NetworkWhitelist": [],
+	}
+}

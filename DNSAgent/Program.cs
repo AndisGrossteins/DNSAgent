@@ -5,12 +5,17 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.ServiceProcess;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+
+using Microsoft.Extensions.Configuration;
+
 
 using log4net;
 using log4net.Config;
@@ -25,21 +30,19 @@ namespace DnsAgent
         private static readonly ILog logger =
                 LogManager.GetLogger(System.Reflection.MethodBase.GetCurrentMethod().DeclaringType);
 
-        private const string OptionsFileName = "options.cfg";
-        private const string RulesFileName = "rules.cfg";
-        private static readonly List<DnsAgent> DnsAgents = new List<DnsAgent>();
-        private static NotifyIcon _notifyIcon;
-        private static ContextMenu _contextMenu;
-        private static readonly DnsMessageCache AgentCommonCache = new DnsMessageCache();
+        private const string OptionsFileName = "options.json";
+        private const string RulesFileName = "rules.json";
 
         private static void Main(string[] args)
         {
 
             Directory.SetCurrentDirectory(AppDomain.CurrentDomain.BaseDirectory);
 
+            var program = new Program();
+
             if (!Environment.UserInteractive) // Running as service
             {
-                using (var service = new Service())
+                using (var service = new Service(program))
                     ServiceBase.Run(service);
             }
             else // Running as console app
@@ -58,30 +61,51 @@ namespace DnsAgent
                         break;
 
                     default:
-                        Start(args);
+                        program.Start(args);
                         break;
                 }
             }
         }
 
-        private static void Start(string[] args)
-        {
+        private NotifyIcon _notifyIcon;
+        private ContextMenu _contextMenu;
 
+        private IConfiguration Configuration { get; set; }
+        private readonly List<DnsAgent> DnsAgents = new List<DnsAgent>();
+        private readonly DnsMessageCache AgentCommonCache = new DnsMessageCache();
+
+        public AppConf AppConf
+        {
+            get; set;
+        } = new AppConf();
+        public List<IPNetwork> AllowedClientIPs { get; set; } = new List<IPNetwork>();
+
+        public Program()
+        {
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("options.json", optional: true, reloadOnChange: true);
+            Configuration = builder.Build();
+            Configuration.GetSection("AppConfiguration").Bind(AppConf);
+            logger.Debug("Options Loaded");
+        }
+
+        private void Start(string[] args)
+        {
             var version = Assembly.GetExecutingAssembly().GetName().Version;
             var buildTime = Utils.RetrieveLinkerTimestamp(Assembly.GetExecutingAssembly().Location);
             var programName = $"DNSAgent {version.Major}.{version.Minor}.{version.Build}";
             logger.Info($"{programName} (built on {buildTime.ToString(CultureInfo.CurrentCulture)})");
             logger.Info("Starting DNSAgent...");
 
-            var options = ReadOptions();
-            var rules = ReadRules();
-            var listenEndpoints = options.ListenOn.Split(',');
+            var rules = LoadRules();
+            var listenEndpoints = AppConf.ListenOn.Split(',');
             var startedEvent = new CountdownEvent(listenEndpoints.Length);
             lock (DnsAgents)
             {
                 foreach (var listenOn in listenEndpoints)
                 {
-                    var agent = new DnsAgent(options, rules, listenOn.Trim(), AgentCommonCache);
+                    var agent = new DnsAgent(AppConf, rules, listenOn.Trim(), AgentCommonCache);
                     agent.Started += () => startedEvent.Signal();
                     DnsAgents.Add(agent);
                 }
@@ -92,13 +116,14 @@ namespace DnsAgent
                 {
                     if (DnsAgents.Any(agent => !agent.Start()))
                     {
-                        PressAnyKeyToContinue();
+                        Console.WriteLine("Press any key to continue ...");
+                        Console.ReadKey(true);
                         return;
                     }
                 }
                 startedEvent.Wait();
                 logger.Info("DNSAgent has been started.");
-                Console.WriteLine("Press Ctrl-R to reload configurations, Ctrl-Q to stop and quit.");
+                Console.WriteLine("Press Ctrl-R to reload rules and clear global cache, Ctrl-Q to stop and quit.");
 
                 Task.Run(() =>
                 {
@@ -121,8 +146,8 @@ namespace DnsAgent
                     }
                 });
 
-                var hideMenuItem = new MenuItem(options.HideOnStart ? "Show" : "Hide");
-                if (options.HideOnStart)
+                var hideMenuItem = new MenuItem(AppConf.HideOnStart ? "Show" : "Hide");
+                if (AppConf.HideOnStart)
                     ShowWindow(GetConsoleWindow(), SwHide);
                 hideMenuItem.Click += (sender, eventArgs) =>
                 {
@@ -170,7 +195,7 @@ namespace DnsAgent
             }
         }
 
-        private static void Stop(bool pressAnyKeyToContinue = true)
+        private void Stop(bool pressAnyKeyToContinue = true)
         {
             lock (DnsAgents)
             {
@@ -183,54 +208,44 @@ namespace DnsAgent
 
             if (Environment.UserInteractive)
             {
-                _notifyIcon.Dispose();
-                _contextMenu.Dispose();
+
                 if (pressAnyKeyToContinue)
-                    PressAnyKeyToContinue();
+                    Console.WriteLine("Press any key to continue ...");
+                    Console.ReadKey(true);
+
+                _contextMenu.Dispose();
+                _notifyIcon.Visible = false;
+                _notifyIcon.Icon = null;
+                _notifyIcon.Dispose();
+
                 Application.Exit();
             }
         }
 
-        private static void Reload()
-        {
-            var options = ReadOptions();
-            var rules = ReadRules();
-            lock (DnsAgents)
-            {
-                foreach (var agent in DnsAgents)
-                {
-                    agent.Options = options;
-                    agent.Rules = rules;
-                }
-            }
-            AgentCommonCache.Clear();
-            logger.Info("Options and rules reloaded. Cache cleared.");
-        }
 
-        private static void PressAnyKeyToContinue()
-        {
-            logger.Info("Press any key to continue . . . ");
-            Console.ReadKey(true);
-        }
+
+
 
         #region Nested class to support running as service
 
         private class Service : ServiceBase
         {
-            public Service()
+            private Program _program;
+            public Service(Program program)
             {
                 ServiceName = "DNSAgent";
+                _program = program;
             }
 
             protected override void OnStart(string[] args)
             {
-                Start(args);
+                _program.Start(args);
                 base.OnStart(args);
             }
 
             protected override void OnStop()
             {
-                Program.Stop();
+                _program.Stop();
                 base.OnStop();
             }
         }
@@ -252,24 +267,7 @@ namespace DnsAgent
 
         #region Util functions to read rules
 
-        private static Options ReadOptions()
-        {
-            Options options;
-            if (File.Exists(Path.Combine(Environment.CurrentDirectory, OptionsFileName)))
-            {
-                options = JsonConvert.DeserializeObject<Options>(
-                    File.ReadAllText(Path.Combine(Environment.CurrentDirectory, OptionsFileName)));
-            }
-            else
-            {
-                options = new Options();
-                File.WriteAllText(Path.Combine(Environment.CurrentDirectory, OptionsFileName),
-                    JsonConvert.SerializeObject(options, Formatting.Indented));
-            }
-            return options;
-        }
-
-        private static Rules ReadRules()
+        private Rules LoadRules()
         {
             Rules rules;
             using (
@@ -284,5 +282,20 @@ namespace DnsAgent
         }
 
         #endregion
+
+        private void Reload()
+        {
+            var rules = LoadRules();
+            lock (DnsAgents)
+            {
+                foreach (var agent in DnsAgents)
+                {
+                    agent.Rules = rules;
+                }
+            }
+            AgentCommonCache.Clear();
+            logger.Info("Options and rules reloaded. Cache cleared.");
+        }
+
     }
 }

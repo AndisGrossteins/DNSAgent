@@ -8,10 +8,13 @@ using System.Net.Sockets;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+
+
+using log4net;
+
 using ARSoft.Tools.Net;
 using ARSoft.Tools.Net.Dns;
 
-using log4net;
 using DNSAgent;
 
 namespace DnsAgent
@@ -26,8 +29,7 @@ namespace DnsAgent
 
         private Task _forwardingTask;
         private Task _listeningTask;
-        private List<KeyValuePair<IPAddress, int>> _networkWhitelist; // Key for address, value for mask
-        private Options _options;
+        private AppConf _options;
         private CancellationTokenSource _stopTokenSource;
         private ConcurrentDictionary<ushort, IPEndPoint> _transactionClients;
         private ConcurrentDictionary<ushort, CancellationTokenSource> _transactionTimeoutCancellationTokenSources;
@@ -35,34 +37,14 @@ namespace DnsAgent
         private UdpClient _udpListener;
         private readonly string _listenOn;
 
-        public DnsAgent(Options options, Rules rules, string listenOn, DnsMessageCache cache)
+        public DnsAgent(AppConf options, Rules rules, string listenOn, DnsMessageCache cache)
         {
-            Options = options ?? new Options();
+            _options = options;
             Rules = rules ?? new Rules();
             _listenOn = listenOn;
             Cache = cache ?? new DnsMessageCache();
         }
 
-        public Options Options
-        {
-            get { return _options; }
-            set
-            {
-                _options = value;
-                if (_options.NetworkWhitelist == null)
-                    _networkWhitelist = null;
-                else
-                {
-                    _networkWhitelist = _options.NetworkWhitelist.Select(s =>
-                    {
-                        var pieces = s.Split('/');
-                        var ip = IPAddress.Parse(pieces[0]);
-                        var mask = int.Parse(pieces[1]);
-                        return new KeyValuePair<IPAddress, int>(ip, mask);
-                    }).ToList();
-                }
-            }
-        }
 
         public Rules Rules { get; set; }
         public DnsMessageCache Cache { get; set; }
@@ -146,8 +128,8 @@ namespace DnsAgent
                         await _udpListener.SendAsync(query.Buffer, query.Buffer.Length, remoteEndPoint);
 
                         // Update cache
-                        if (Options.CacheResponse)
-                            Cache.Update(message.Questions[0], message, Options.CacheAge);
+                        if (_options.CacheResponse)
+                            Cache.Update(message.Questions[0], message, _options.CacheAge);
                     }
                     catch (ParsingException)
                     {
@@ -204,10 +186,11 @@ namespace DnsAgent
         {
             await Task.Run(async () =>
             {
+                DnsMessage message = new DnsMessage();
+                DnsQuestion question;
+
                 try
                 {
-                    DnsMessage message;
-                    DnsQuestion question;
                     var respondedFromCache = false;
 
                     try
@@ -221,21 +204,21 @@ namespace DnsAgent
                     }
 
                     // Check for authorized subnet access
-                    if (_networkWhitelist != null)
+                    var allowedClient = _options.AllowedClientIPs;
+                    var clientIP = udpMessage.RemoteEndPoint.Address;
+                    if ((allowedClient != null) && (allowedClient.Count > 0))
                     {
-                        if (_networkWhitelist.All(pair =>
-                            !pair.Key.GetNetworkAddress(pair.Value)
-                                .Equals(udpMessage.RemoteEndPoint.Address.GetNetworkAddress(pair.Value))))
+                        if (allowedClient.All(ipNetwork => !IPNetwork.Contains(ipNetwork, clientIP)))
                         {
-                            logger.Info("-> {udpMessage.RemoteEndPoint.Address} is not authorized, who requested {question}.");
-                            message.ReturnCode = ReturnCode.Refused;
-                            message.IsQuery = false;
+                            logger.Warn($"{clientIP} is not authorized.");
+
+                            throw new AuthorizationException();
                         }
                     }
-                    logger.Info($"-> {udpMessage.RemoteEndPoint.Address} requested {question.Name} (#{message.TransactionID}, {question.RecordType}).");
+                    logger.Info($"{clientIP} requested {question.Name} (#{message.TransactionID}, {question.RecordType}).");
 
                     // Query cache
-                    if (Options.CacheResponse)
+                    if (_options.CacheResponse)
                     {
                         if (Cache.ContainsKey(question.Name) && Cache[question.Name].ContainsKey(question.RecordType))
                         {
@@ -245,17 +228,17 @@ namespace DnsAgent
                                 var cachedMessage = entry.Message;
                                 logger.Info($"-> #{message.TransactionID} served from cache.");
                                 cachedMessage.TransactionID = message.TransactionID; // Update transaction ID
-                                cachedMessage.TSigOptions = message.TSigOptions; // Update TSig options
+                                cachedMessage.TSigOptions = message.TSigOptions; // Update TSig _options
                                 message = cachedMessage;
                                 respondedFromCache = true;
                             }
                         }
                     }
 
-                    var targetNameServer = Options.DefaultNameServer;
-                    var useHttpQuery = Options.UseHttpQuery;
-                    var queryTimeout = Options.QueryTimeout;
-                    var useCompressionMutation = Options.CompressionMutation;
+                    var targetNameServer = _options.LocalNameServer;
+                    var useHttpQuery = _options.UseHttpQuery;
+                    var queryTimeout = _options.QueryTimeout;
+                    var useCompressionMutation = _options.CompressionMutation;
 
                     // Match rules
                     if (message.IsQuery &&
@@ -383,13 +366,27 @@ namespace DnsAgent
                                 _udpListener.SendAsync(responseBuffer, responseBuffer.Length, udpMessage.RemoteEndPoint);
 
                             // Update cache
-                            if (Options.CacheResponse && !respondedFromCache)
-                                Cache.Update(question, message, Options.CacheAge);
+                            if (_options.CacheResponse && !respondedFromCache)
+                                Cache.Update(question, message, _options.CacheAge);
                         }
                     }
                 }
                 catch (ParsingException)
                 {
+                }
+                catch (AuthorizationException)
+                {
+                    message.ReturnCode = ReturnCode.Refused;
+                    message.IsQuery = false;
+                    // Already answered, directly return to the client
+                    byte[] responseBuffer;
+                    message.Encode(false, out responseBuffer);
+                    if (responseBuffer != null)
+                    {
+                        await
+                            _udpListener.SendAsync(responseBuffer, responseBuffer.Length, udpMessage.RemoteEndPoint);
+
+                    }
                 }
                 catch (SocketException e)
                 {
