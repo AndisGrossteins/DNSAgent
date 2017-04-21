@@ -46,15 +46,17 @@ A sample configuration:
 ### options.json:
 ```
 {
-    "HideOnStart": false,
-    "ListenOn": "127.0.0.1:53, [::1]",
-    "DefaultNameServer": "119.29.29.29",
-    "UseHttpQuery": false,
-    "QueryTimeout": 4000,
-    "CompressionMutation": false,
-    "CacheResponse": true,
-    "CacheAge": 86400,
-    "NetworkWhitelist": null
+	"AppConfiguration": {
+		"HideOnStart": false,
+		"ListenOn": "127.0.0.1:53",
+		"LocalNameServer": "119.29.29.29",
+		"WorldNameServer": "8.8.4.4",
+		"QueryTimeout": 4000,
+		"CompressionMutation": false,
+		"CacheResponse": true,
+		"CacheAge": 0,
+		"NetworkWhitelist": [],
+	}
 }
 ```
 
@@ -69,8 +71,8 @@ If you want to filter source IP, you can set `NetworkWhitelist` with the followi
         "192.168.199.0/24"
     ]
 ```
-WARNING: Set `NetworkWhitelist` to `[]` will allow all requests. 
-Set `NetworkWhitelist` to `null` will throw an exception.
+NOTE: Set `NetworkWhitelist` to `[]` will allow all requests. 
+WARNING: Set `NetworkWhitelist` to `null` will throw an exception.
 
 ### rules.json:
 ```
