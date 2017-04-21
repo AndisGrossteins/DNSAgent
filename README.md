@@ -1,5 +1,8 @@
-# DNSAgent
-A powerful "hosts" replacement.
+# IntelliDNS
+IntelliDNS serves as a "proxy" between your DNS client and DNS servers
+
+# Why we wrote this?
+For well-known reasons, results from "local" DNS servers are contaminated. Still, we need to inquire local DNS servers for low-latency and access certain media contents. Out of these reasons, we need to provide an intelligent routing mechanism for our DNS. One approach is to create a middle-layer DNS between the DNS client and DNS servers. This tool acts like a "proxy" "caching server" or "forwarding server", but can distinguish results based on their geographical regions.
 
 ## Features
 
