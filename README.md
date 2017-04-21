@@ -29,11 +29,11 @@ https://stackia.github.io/masq2agent/
 
 ## Usage
 
-Edit `options.cfg` to change options.
+Edit `options.json` to change options.
 
-Edit `rules.cfg` to customize your rules.
+Edit `rules.json` to customize your rules.
 
-Both `options.cfg` and `rules.cfg` are standord JSON files, your can use any of your favorite editors to open them.
+Both `options.json` and `rules.json` are standord JSON files, your can use any of your favorite editors to open them.
 
 Launch `DNSAgent.exe` and **change your system DNS to 127.0.0.1**. Voilà!
 
@@ -43,7 +43,7 @@ You can choose to install DNSAgent as a Windows service by running `Install as S
 
 A sample configuration:
 
-### options.cfg:
+### options.json:
 ```
 {
     "HideOnStart": false,
@@ -69,9 +69,10 @@ If you want to filter source IP, you can set `NetworkWhitelist` with the followi
         "192.168.199.0/24"
     ]
 ```
-WARNING: Set `NetworkWhitelist` to `[]` will deny all requests. If you want to disable source IP filting, set `NetworkWhitelist` to `null`.
+WARNING: Set `NetworkWhitelist` to `[]` will allow all requests. 
+Set `NetworkWhitelist` to `null` will throw an exception.
 
-### rules.cfg:
+### rules.json:
 ```
 [
     {
