@@ -18,14 +18,14 @@ namespace DNSAgent
         public string ListenOn { get; set; } = "127.0.0.1";
 
         /// <summary>
-        ///     Querys that don't match any rules will be send to this server.
+        ///     Queries that don't match any rules will be send to this server.
         /// </summary>
         public string LocalNameServer { get; set; } = "119.29.29.29";
 
-        /// <summary>
-        ///     Querys that don't match any rules will be send to this server.
-        /// </summary>
-        public string WorldNameServer { get; set; } = "8.8.8.8";
+		/// <summary>
+		///     Queries that don't match any rules will be send to this server.
+		/// </summary>
+		public string WorldNameServer { get; set; } = "8.8.8.8";
 
         /// <summary>
         ///     Whether to use DNSPod HttpDNS protocol to query the name server for A record.
