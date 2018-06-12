@@ -1,8 +1,10 @@
 ﻿using System.Collections.Generic;
 
+using System.Net;
+
 namespace DNSAgent
 {
-    internal class Options
+    internal class AppConf
     {
         /// <summary>
         ///     Set to true to automatically hide the window on start.
@@ -18,7 +20,12 @@ namespace DNSAgent
         /// <summary>
         ///     Querys that don't match any rules will be send to this server.
         /// </summary>
-        public string DefaultNameServer { get; set; } = "8.8.8.8";
+        public string LocalNameServer { get; set; } = "119.29.29.29";
+
+        /// <summary>
+        ///     Querys that don't match any rules will be send to this server.
+        /// </summary>
+        public string WorldNameServer { get; set; } = "8.8.8.8";
 
         /// <summary>
         ///     Whether to use DNSPod HttpDNS protocol to query the name server for A record.
@@ -51,6 +58,33 @@ namespace DNSAgent
         ///     Source network whitelist. Only IPs from these network are accepted. Set to null to accept all IP (disable
         ///     whitelist), empty to deny all IP.
         /// </summary>
-        public List<string> NetworkWhitelist { get; set; } = null;
+        public List<string> NetworkWhitelist {
+            get { return _networkWhitelist; }
+            set
+            {
+                _networkWhitelist = value;
+
+                AllowedClientIPs = new List<IPNetwork>();
+                if (value == null)
+                    return;
+                foreach (var ipaddr in value)
+                {
+                    var ipNetwork = IPNetwork.Parse(ipaddr);
+                    if (ipNetwork != null)
+                    {
+                        AllowedClientIPs.Add(ipNetwork);
+                    }
+                }
+            }
+        }
+        private List<string> _networkWhitelist = new List<string>();
+
+        /// <summary>
+        /// Derived properties    
+        /// Source network whitelist. 
+        /// </summary>
+        public List<IPNetwork> AllowedClientIPs { get; set; } = new List<IPNetwork>();
+
+
     }
 }

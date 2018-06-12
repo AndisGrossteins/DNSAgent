@@ -1,5 +1,8 @@
-# DNSAgent
-A powerful "hosts" replacement.
+# IntelliDNS
+IntelliDNS serves as a "proxy" between your DNS client and DNS servers
+
+# Why we wrote this?
+For well-known reasons, results from "local" DNS servers are contaminated. Still, we need to inquire local DNS servers for low-latency and access certain media contents. Out of these reasons, we need to provide an intelligent routing mechanism for our DNS. One approach is to create a middle-layer DNS between the DNS client and DNS servers. This tool acts like a "proxy" "caching server" or "forwarding server", but can distinguish results based on their geographical regions.
 
 ## Features
 
@@ -29,11 +32,11 @@ https://stackia.github.io/masq2agent/
 
 ## Usage
 
-Edit `options.cfg` to change options.
+Edit `options.json` to change options.
 
-Edit `rules.cfg` to customize your rules.
+Edit `rules.json` to customize your rules.
 
-Both `options.cfg` and `rules.cfg` are standord JSON files, your can use any of your favorite editors to open them.
+Both `options.json` and `rules.json` are standord JSON files, your can use any of your favorite editors to open them.
 
 Launch `DNSAgent.exe` and **change your system DNS to 127.0.0.1**. Voilà!
 
@@ -43,18 +46,20 @@ You can choose to install DNSAgent as a Windows service by running `Install as S
 
 A sample configuration:
 
-### options.cfg:
+### options.json:
 ```
 {
-    "HideOnStart": false,
-    "ListenOn": "127.0.0.1:53, [::1]",
-    "DefaultNameServer": "119.29.29.29",
-    "UseHttpQuery": false,
-    "QueryTimeout": 4000,
-    "CompressionMutation": false,
-    "CacheResponse": true,
-    "CacheAge": 86400,
-    "NetworkWhitelist": null
+	"AppConfiguration": {
+		"HideOnStart": false,
+		"ListenOn": "127.0.0.1:53",
+		"LocalNameServer": "119.29.29.29",
+		"WorldNameServer": "8.8.4.4",
+		"QueryTimeout": 4000,
+		"CompressionMutation": false,
+		"CacheResponse": true,
+		"CacheAge": 0,
+		"NetworkWhitelist": [],
+	}
 }
 ```
 
@@ -69,9 +74,10 @@ If you want to filter source IP, you can set `NetworkWhitelist` with the followi
         "192.168.199.0/24"
     ]
 ```
-WARNING: Set `NetworkWhitelist` to `[]` will deny all requests. If you want to disable source IP filting, set `NetworkWhitelist` to `null`.
+NOTE: Set `NetworkWhitelist` to `[]` will allow all requests. 
+WARNING: Set `NetworkWhitelist` to `null` will throw an exception.
 
-### rules.cfg:
+### rules.json:
 ```
 [
     {

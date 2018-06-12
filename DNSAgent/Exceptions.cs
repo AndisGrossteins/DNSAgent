@@ -22,4 +22,6 @@ namespace DNSAgent
     }
 
     internal class ParsingException : Exception {}
+    internal class AuthorizationException : Exception {}
+
 }
