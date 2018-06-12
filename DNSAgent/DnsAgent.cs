@@ -242,7 +242,7 @@ namespace DnsAgent
 
                     // Match rules
                     if (message.IsQuery &&
-                        (question.RecordType == RecordType.A || question.RecordType == RecordType.Aaaa))
+                        (question.RecordType == RecordType.A || question.RecordType == RecordType.Aaaa || question.RecordType == RecordType.Ptr))
                     {
                         for (var i = Rules.Count - 1; i >= 0; i--)
                         {
@@ -277,6 +277,13 @@ namespace DnsAgent
                                     if (recordType == RecordType.A && useHttpQuery)
                                     {
                                         await ResolveWithHttp(targetNameServer, address, queryTimeout, message);
+                                    }
+                                    else if (recordType == RecordType.Ptr)
+                                    {
+                                        var answerRecord = new PtrRecord(question.Name, 600, Rules[i].Address);
+                                        message.AnswerRecords.Add(answerRecord);
+                                        message.ReturnCode = ReturnCode.NoError;
+                                        message.IsQuery = false;
                                     }
                                     else
                                     {
