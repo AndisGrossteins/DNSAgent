@@ -82,12 +82,19 @@ namespace DnsAgent
 
         public Program()
         {
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-                .AddJsonFile("options.json", optional: true, reloadOnChange: true);
-            Configuration = builder.Build();
-            Configuration.GetSection("AppConfiguration").Bind(AppConf);
-            logger.Debug("Options Loaded");
+			try
+			{
+				var builder = new ConfigurationBuilder()
+					.SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+					.AddJsonFile(OptionsFileName, optional: true, reloadOnChange: true);
+				Configuration = builder.Build();
+				Configuration.GetSection("AppConfiguration").Bind(AppConf);
+				logger.Debug("Options Loaded");
+			}
+			catch (Exception ex)
+			{
+				logger.Error("Error loading configuration", ex);
+			}
         }
 
         private void Start(string[] args)
@@ -276,7 +283,12 @@ namespace DnsAgent
             using (var jsonTextReader = new JsonTextReader(reader))
             {
                 var serializer = JsonSerializer.CreateDefault();
-                rules = serializer.Deserialize<Rules>(jsonTextReader) ?? new Rules();
+				try {
+					rules = serializer.Deserialize<Rules>(jsonTextReader) ?? new Rules();
+				} catch (Exception ex) {
+					logger.Error("Failed loading rules", ex);
+					rules = new Rules();
+				}
             }
             return rules;
         }
@@ -286,15 +298,21 @@ namespace DnsAgent
         private void Reload()
         {
             var rules = LoadRules();
-            lock (DnsAgents)
-            {
-                foreach (var agent in DnsAgents)
-                {
-                    agent.Rules = rules;
-                }
-            }
-            AgentCommonCache.Clear();
-            logger.Info("Options and rules reloaded. Cache cleared.");
+			if ( rules.Count > 0 )
+			{
+				lock (DnsAgents)
+				{
+					foreach (var agent in DnsAgents)
+					{
+						agent.Rules = rules;
+					}
+				}
+				logger.Info("Rules reloaded.");
+			} else {
+				logger.WarnFormat("Rules not reloaded. Please check {0} file for errors", RulesFileName);
+			}
+			AgentCommonCache.Clear();
+            logger.Info("Cache cleared.");
         }
 
     }
