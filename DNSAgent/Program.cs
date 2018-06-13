@@ -123,8 +123,7 @@ namespace DnsAgent
                 {
                     if (DnsAgents.Any(agent => !agent.Start()))
                     {
-                        Console.WriteLine("Press any key to continue ...");
-                        Console.ReadKey(true);
+                        PressAnyKeyToContinue();
                         return;
                     }
                 }
@@ -187,6 +186,18 @@ namespace DnsAgent
                     if (eventArgs.Button == MouseButtons.Left)
                         hideMenuItem.PerformClick();
                 };
+
+                Application.ApplicationExit += new EventHandler((sender, eventArgs) => CleanIcon());
+
+                SetConsoleCtrlHandler(new ConsoleEventDelegate((eventType) =>
+                {
+                    if (eventType == CtrlTypes.CTRL_CLOSE_EVENT)
+                    {
+                        CleanIcon();
+                    }
+                    return false;
+                }), true);
+
                 Application.Run();
             }
             else
@@ -217,19 +228,29 @@ namespace DnsAgent
             {
 
                 if (pressAnyKeyToContinue)
-                    Console.WriteLine("Press any key to continue ...");
-                    Console.ReadKey(true);
-
-                _contextMenu.Dispose();
-                _notifyIcon.Visible = false;
-                _notifyIcon.Icon = null;
-                _notifyIcon.Dispose();
-
+                {
+                    CleanIcon();
+                    PressAnyKeyToContinue();
+                }
                 Application.Exit();
             }
         }
 
+		private void CleanIcon()
+		{
+			if (_notifyIcon == null) { return; }
+			_notifyIcon.Dispose();
+			_notifyIcon = null;
+			_contextMenu?.Dispose();
+			_contextMenu = null;
+		}
 
+
+		private static void PressAnyKeyToContinue()
+        {
+			Console.WriteLine("Press any key to continue ...");
+			Console.ReadKey(true);
+        }
 
 
 
@@ -266,6 +287,21 @@ namespace DnsAgent
 
         [DllImport("user32.dll")]
         private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        public enum CtrlTypes
+        {
+            CTRL_C_EVENT = 0,
+            CTRL_BREAK_EVENT,
+            CTRL_CLOSE_EVENT,
+            CTRL_LOGOFF_EVENT = 5,
+            CTRL_SHUTDOWN_EVENT
+        }
+
+
+        private delegate bool ConsoleEventDelegate(CtrlTypes eventType);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool SetConsoleCtrlHandler(ConsoleEventDelegate callback, bool add);
 
         private const int SwHide = 0;
         private const int SwShow = 5;
