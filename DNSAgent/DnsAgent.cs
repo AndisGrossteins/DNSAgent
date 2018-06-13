@@ -64,7 +64,7 @@ namespace DnsAgent
             }
             catch (SocketException e)
             {
-                logger.Error("[Listener] Failed to start DNSAgent:\n{0}", e);
+                logger.Error("[Listener] Failed to start DNSAgent", e);
                 Stop();
                 return false;
             }
@@ -81,7 +81,7 @@ namespace DnsAgent
                     catch (SocketException e)
                     {
                         if (e.SocketErrorCode != SocketError.ConnectionReset)
-                            logger.Error("[Listener.Receive] Unexpected socket error:\n{0}", e);
+                            logger.Error("[Listener.Receive] Unexpected socket error", e);
                     }
                     catch (AggregateException e)
                     {
@@ -89,17 +89,17 @@ namespace DnsAgent
                         if (socketException != null)
                         {
                             if (socketException.SocketErrorCode != SocketError.ConnectionReset)
-                                logger.Error("[Listener.Receive] Unexpected socket error:\n{0}", e);
+                                logger.Error("[Listener.Receive] Unexpected socket error", e);
                         }
                         else
-                            logger.Error("[Listener] Unexpected exception:\n{0}", e);
+                            logger.Error("[Listener] Unexpected exception", e);
                     }
                     catch (ObjectDisposedException)
                     {
                     } // Force closing _udpListener will cause this exception
                     catch (Exception e)
                     {
-                        logger.Error("[Listener] Unexpected exception:\n{0}", e);
+                        logger.Error("[Listener] Unexpected exception", e);
                     }
                 }
             }, _stopTokenSource.Token);
@@ -139,14 +139,14 @@ namespace DnsAgent
                         if (e.SocketErrorCode != SocketError.ConnectionReset)
                             logger.Error("[Forwarder.Send] Name server unreachable.");
                         else
-                            logger.Error("[Forwarder.Receive] Unexpected socket error:\n{0}", e);
+                            logger.Error("[Forwarder.Receive] Unexpected socket error", e);
                     }
                     catch (ObjectDisposedException)
                     {
                     } // Force closing _udpListener will cause this exception
                     catch (Exception e)
                     {
-                        logger.Error("[Forwarder] Unexpected exception:\n{0}", e);
+                        logger.Error("[Forwarder] Unexpected exception", e);
                     }
                 }
             }, _stopTokenSource.Token);
@@ -226,7 +226,7 @@ namespace DnsAgent
                             if (!entry.IsExpired)
                             {
                                 var cachedMessage = entry.Message;
-                                logger.Info($"-> #{message.TransactionID} served from cache.");
+                                logger.InfoFormat("		#{0} {1} served from cache.", message.TransactionID, question.Name);
                                 cachedMessage.TransactionID = message.TransactionID; // Update transaction ID
                                 cachedMessage.TSigOptions = message.TSigOptions; // Update TSig _options
                                 message = cachedMessage;
@@ -397,11 +397,11 @@ namespace DnsAgent
                 }
                 catch (SocketException e)
                 {
-                    logger.Error("[Listener.Send] Unexpected socket error:\n{0}", e);
+                    logger.Error("[Listener.Send] Unexpected socket error", e);
                 }
                 catch (Exception e)
                 {
-                    logger.Error("[Processor] Unexpected exception:\n{0}", e);
+                    logger.Error("[Processor] Unexpected exception", e);
                 }
             });
         }
@@ -468,12 +468,12 @@ namespace DnsAgent
                 if (e.SocketErrorCode == SocketError.ConnectionReset) // Target name server port unreachable
                     logger.Warn($"[Forwarder.Send] Name server port unreachable: {targetNameServer}");
                 else
-                    logger.Error($"[Forwarder.Send] Unhandled socket error: {e.Message}");
+                    logger.Error($"[Forwarder.Send] Unhandled socket error: {e.Message}", e);
                 Utils.ReturnDnsMessageServerFailure(message, out responseBuffer);
             }
             catch (Exception e)
             {
-                logger.Error("[Forwarder] Unexpected exception:\n{0}", e);
+                logger.Error("[Forwarder] Unexpected exception", e);
                 Utils.ReturnDnsMessageServerFailure(message, out responseBuffer);
             }
 
